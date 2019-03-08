@@ -1,0 +1,323 @@
+---
+title: "Heart Disease Prediction"
+author: "Tuong Nguyen"
+date: "March 2, 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Abstract
+Heart disease is increasing cause of mortality globally.  This project uses different modeling methods to predict the chance of having heart disease.  It uses accuracy to measure how accurate the model will be.  The project uses Logistic Regression, KNN, Classification Trees, and Random Forest for its modeling.  Furthermore, uses K-Fold Cross Validation on all of these methods.
+
+## Introduction
+As a medical doctor, more than half of our patients are at risk of having some type of heart disease.  As a matter of fact, heart disease is overcoming chronic condition for common cause of mortality in adults.  There are many types of heart disease; common ones that causes mortality are stroke, coronary heart disease and rheumatic heart disease.  According to World Health Organization(WHO), there are 17.5 million death from cardiovascular disease globally in 2005 up from 14.4 million in 1990.  More than 80 percent of these deaths are from low to middle income countries.  The projected deaths by 2030 are more than 30 and 25 million for middle and low income respectively. There are many factors that contribute to heart disease.  Some can be control through lifestyle modifications and medications.  While others factor can't be control such as age, genetics, gender, etc.  
+
+This project will use the data that is available on kaggle to analyze the data and uses various machine learning methods to predict the chance of a person will have heart disease and it will measure the accuracies to find which method is the best.
+
+## Data
+The dataset was downloaded from https://www.kaggle.com/ronitf/heart-disease-uci into folder data.  The data contains 14 attributes.  *Table 1* below contains the descriptions of each of the attributes.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(dslabs)
+library(readr)
+library(dplyr)
+library(caret)
+library(psych)
+library(DataExplorer)
+library(kableExtra)
+library(gridExtra)
+library(randomForest)
+library(rpart.plot)
+
+att_df <- data.frame(value = c('age','sex','cp','trestbps',
+                           'chol','fbs','restecg',' ', ' ', 'thalach',
+                           'exang','oldpeak','slope','ca','thal','target'),
+                 description = c('age in years','1=male, 0=female','chest pain type 1 - typical agina, 2 - atypical agina, 3 - non-anginal pain, 4 - asymptomatic', 'resting blood pressure in mmHg on admission to the hospital', 'serum cholesterol in mg/dl', 'fasting blood sugar > 120 mg/dl, 1 - true, 0 - false', 'resting electrocardiographic results - 0 - normal, 1 - having ST-T wave abnormality','(T wave inversion and/or ST elevation or depression of > 0.05mv),', '2 - showing probable or definite left ventricular hypertrophy by Estes criteria', 'Maximum heart rate achieve', 'exercise induced angina (1 - yes, 0 - no)', 'ST depression induced by exercise relative to rest','The slope of the peak exercise ST segment', 'Number of major blood vessels(0-3) colored by flourosopy','3-normal,6 - fixed defect, 7 - reversable defect','target 1 or 0'))
+att_df %>% kable(caption='Description of Data Attributes') %>% kable_styling(bootstrap_options = "striped", full_width = F, position = "left", font_size = 10, latex_options = "hold_position") 
+```
+
+The data is read into the data frame, heartDisease, using function, read_csv() in R.  The data is in .csv file with comma delimited.  The following code shows that the structure of heartDisease and its dimensions.  The dimensions contains 303 rows of observation and 14 columns of attributes.  The code also provide what the data looks like with the first and last few rows shown in table 2 and 3 respectively.  The data is surprisingly small compared to other data used for machine learning.
+
+```{r, echo=TRUE}
+# read in the comma delimited data.
+heartDisease <- read_csv("./data/heart.csv")
+
+str(heartDisease)
+dim(heartDisease)
+
+head(heartDisease) %>% kable(caption='First 6 Observations from Heart Disease') %>% kable_styling(bootstrap_options = "striped", full_width = F, position = "left", font_size = 10, latex_options = "hold_position") 
+
+tail(heartDisease) %>% kable(caption='Last 6 Observations from Heart Disease') %>% kable_styling(bootstrap_options = "striped", full_width = F, position = "left", font_size = 10, latex_options = "hold_position") 
+```
+
+The data need to be verified whether there are any NAs in them so that it could be replaced with '0'.  The following code will sum up any NAs in the heartDisease data frame. From the output of the code, all of the observations do not contain any NAs in the data.
+
+```{r, echo=TRUE}
+## Sum up any NA in each attributes.
+sapply(heartDisease, function(x) sum(is.na(x)))
+```
+
+The following *table 4* will show the description statistics for each of the attributes.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+describe(heartDisease) %>% knitr::kable(caption = "Description Statistics for Heart Disease") %>% kable_styling(bootstrap_options = "striped", full_width = F, position = "left", font_size = 5, latex_options = "hold_position")
+```
+
+The histograms for each of attributes is shown below.  From the graphs, there are more male than female in the study and the median age is between 50-60.  
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+par(mfrow = c(5,3), mar = c(2,1,1,1))
+hist(heartDisease$age, col="green", main="Age")
+hist(heartDisease$sex, col="green", main="Sex")
+hist(heartDisease$cp, col="green", main="Chest Pain")
+hist(heartDisease$trestbps, col="green", main = "Resting Blood Pressure")
+hist(heartDisease$chol, col = "green", main="Cholesterol")
+hist(heartDisease$fbs, col="green", main="Fasting Blood Sugar")
+hist(heartDisease$restecg, col="green", main="Resting ECG")
+hist(heartDisease$thalach, col="green", main="Maxium Heart Rate")
+hist(heartDisease$exang, col="green", main="Exercise Induced Agina")
+hist(heartDisease$oldpeak, col="green", main="ST Depression")
+hist(heartDisease$slope, col="green", main="Slope of ST Segment")
+hist(heartDisease$ca, col="green", main="Number of blood Vessels")
+hist(heartDisease$thal, col="green", main="Thal")
+hist(heartDisease$target, col="green", main="Target")
+```
+
+The histograms of each attributes are categorized by the presence of heart disease(1) or not(0) are also shown below.  The charts can be shown that the presence of heart disease occur with same equivalent for both sexes, while without disease, there's more male than female.  In addition, resting blood pressure is higher with the presence of heart disease than without.  Chest pain also shown to have higher indication with disease than without.  Maximum heart rate achieve is much higher in presence of heart disease as well.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+p1 <- ggplot(heartDisease,aes(x=age))+geom_histogram(binwidth=0.3)+facet_grid(~target)+theme_bw()
+p2 <- ggplot(heartDisease,aes(x=sex))+geom_histogram(binwidth=0.5) + facet_grid(~target)+theme_bw()
+p3 <- ggplot(heartDisease,aes(x=cp))+geom_histogram(binwidth=0.5)+facet_grid(~target)+theme_bw()
+p4 <- ggplot(heartDisease,aes(x=trestbps))+geom_histogram(binwidth=0.3) + facet_grid(~target)+theme_bw()
+
+grid.arrange(p1, p2, p3, p4, nrow = 2)
+
+p5 <- ggplot(heartDisease,aes(x=chol))+geom_histogram(binwidth=0.5) + facet_grid(~target)+theme_bw()
+p6 <- ggplot(heartDisease,aes(x=fbs))+geom_histogram(binwidth=0.5) + facet_grid(~target)+theme_bw()
+p7 <- ggplot(heartDisease,aes(x=restecg))+geom_histogram(binwidth=0.5) + facet_grid(~target)+theme_bw()
+p8 <- ggplot(heartDisease,aes(x=thalach))+geom_histogram(binwidth=0.3) + facet_grid(~target)+theme_bw()
+
+grid.arrange(p5,p6,p7,p8, nrow = 2)
+
+p9 <- ggplot(heartDisease,aes(x=exang))+geom_histogram(binwidth=0.5) + facet_grid(~target)+theme_bw()
+p10 <- ggplot(heartDisease,aes(x=oldpeak))+geom_histogram(binwidth=0.5) + facet_grid(~target)+theme_bw()
+p11 <- ggplot(heartDisease,aes(x=slope))+geom_histogram(binwidth=0.5) + facet_grid(~target)+theme_bw()
+p12 <- ggplot(heartDisease,aes(x=ca))+geom_histogram(binwidth=0.5) + facet_grid(~target)+theme_bw()
+p13 <- ggplot(heartDisease,aes(x=thal))+geom_histogram(binwidth=0.5) + facet_grid(~target)+theme_bw()
+
+grid.arrange(p9,p10,p11,p12,p13, nrow =2)
+
+```
+
+The next task is to find whether there are correlations between these variables.  The plot of correlations below shows that chest pain, maximum heart rate, exercise induced angina, ST depression induced by exercise relative to rest has the highest correlation with target.  Each of these attributes are plotted against target are also shown below.  A summary of correlation of all the attributes are plotted and their histograms are also available.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+plot_correlation(heartDisease)
+par(mfrow = c(2,2), mar = c(2,1,1,1))
+plot(heartDisease$cp, heartDisease$target, main="chest pain vs target")
+plot(heartDisease$thalach,heartDisease$target, main="thalach vs target")
+plot(heartDisease$exang, heartDisease$target, main="exercise induced agina vs target")
+plot(heartDisease$oldpeak,heartDisease$target, main="ST depression vs target")
+
+library("PerformanceAnalytics")
+chart.Correlation(heartDisease[, c(1:14)], histogram=TRUE, pch=19)
+
+set.seed(1)
+y<-heartDisease$target
+test_index <- createDataPartition(y,times = 1, p = 0.5, list = FALSE)
+train_set <- heartDisease %>% slice(-test_index)
+test_set <- heartDisease %>% slice(test_index)
+
+```
+
+## Method & Analysis
+The data is partitioned into training set and test set.  The training set consists of 151 observations while the test set has 152.  The training set will be used to train the learning machine and will use test set to predict the chance of having heart disease.  From the data set, if there is a random guess that the person will have a heart disease, that guess will be *55.6 percent* correct with the squared loss of *0.2494654*.  This project will use different models to improve the chances of predicting correctly.  The first model will be Logistic Regression.
+
+```{r, message=FALSE, warning=FALSE}
+dim(train_set)
+dim(test_set)
+
+m<-mean(train_set$target)
+m
+mean((m - test_set$target)^2)
+```
+
+
+### 1. Logistic Regression
+Logistic Regression is used to model binary dependent variable with two possible outcomes.  In heart disease project, the outcome of 1 denotes heart disease presence and zero otherwise.  It is a form of binomial regression.  In R programming, the use of glm() and predict can be used for logistic modeling.  All thirteen predictors will be used to predict the person having heart disease.  In Logistic Regression, the predictor variables can be continuous or categorical.  The following code demonstrates the use of glm and predict. After the glm was run, the coefficients and intercept of the linear model are listed.  If \(\widehat y \) is greater than *0.5*, a 1(having heart disease) is assigned to *y* otherwise assigned a zero.  The confusionMatrix showed the accuracy to be *0.7961* with confidence interval of *(0.7232, 0.857)*.  Thus, our Logistic Regression model is much better than regular guesses.
+
+```{r, message=FALSE, warning=FALSE}
+fit <- glm(factor(target) ~ age + sex + factor(cp) + trestbps + 
+               chol + fbs + factor(restecg) + thalach + exang + 
+               oldpeak + factor(slope) + factor(ca) + factor(thal), family=binomial(link='logit'), data=train_set)
+summary(fit)
+fit$coef 
+y_hat <- predict(fit, test_set)
+
+y <- ifelse(y_hat > 0.5, 1, 0)
+confusionMatrix(data=factor(y), factor(test_set$target))
+```
+
+### 2. Logistic Regression with K-fold Cross Validation
+Since regular logistic regression can produce the accuracy of 0.7961, the question to ask is 'Is this accuracy accurate?'  K-Fold Cross Validation is applied to Logistic Regression to to validate the accuracy of the model.  Cross validation is used in machine learning to estimate the skill of a machine learning model on unseen data.  K-Fold Cross-Validation is a resampling procedure used to evaluate machine learning models.  The procedure has a single parameter called *k* that refers to the number of groups that a given data sample is to be split into.  In this project, *k* is set at 10, thus becoming 10 fold cross validation. This means that there will be 10 samples using 10% of the observation each.  The code and its output to perform on K-Fold Cross Validation is shown below.  Notice that the accuracy is now *.8882* with a smaller confidence interval, which is an improvement and more reliable.
+
+```{r, message=FALSE, warning=FALSE}
+control <- trainControl(method='cv', number=10, savePredictions=T)
+
+train_glm_cv <- train(factor(target) ~ age + sex + factor(cp) + trestbps + chol + fbs 
+               + factor(restecg) + thalach + exang + oldpeak + factor(slope) 
+               + factor(ca) + factor(thal), data=heartDisease, trControl=control, method='glm', family=binomial(link='logit'))
+
+print(train_glm_cv)
+glm_pred <- predict(train_glm_cv, test_set, type = "raw")
+cm_lr <- confusionMatrix(data=factor(glm_pred), factor(test_set$target))
+cm_lr
+###confusionMatrix(data=factor(glm_pred), factor(test_set$target))
+
+varImp(train_glm_cv)
+```
+
+Notice the variable importance in the previous logistic regression model. The output from the code showed that ca(number of blood vessels), chest pain(cp) and sex are the most important variables.
+
+
+### 3. K-nearest Neighbors(KNN)
+K-Nearest Neighbors, or KNN, is the most used algorithm in machine learning.  Its purpose is to separate the data points into several classes to predict the classification of the new sample point.  KNN is mostly use in real-life scenarios because of its non-parametric characteristics.  It implies that it does not make any assumptions about the distribution of the data. In R programming, the functions *knn3* and *predict* to train the model and make the prediction of heart disease using the default value of *k=1*.  We notice that the accuracy is of *0.6382*, which is worse than our Logistic Regression.  We need to find the appropriate *k* so that it will provide an optimum accuracy. 
+
+```{r, message=FALSE, warning=FALSE}
+knn_fit <- knn3(factor(target) ~ age + sex + factor(cp) + trestbps + 
+                  chol + fbs + factor(restecg) + thalach + exang + 
+                  oldpeak + factor(slope) + factor(ca) + factor(thal), data = train_set)
+y_hat_knn <- predict(knn_fit,test_set, type = "class")
+confusionMatrix(data=factor(y_hat_knn), factor(test_set$target))
+```
+
+The following code that will find the maximum k which provide the best model, using tuneGrid parameter in the train function.  To make the prediction more accurate, a reduction in the predictor variables because the correlations table noted that chest pain, maximum heart rate, exercise induced angina, and old ST peak on ECG have the highest correlation with target. The code is shown below.
+
+```{r, message=FALSE, warning=FALSE}
+train_knn <- train(factor(target) ~ sex + factor(cp) + thalach + exang + 
+                     oldpeak, method = "knn",
+                   data = train_set, tuneGrid = data.frame(k = seq(1,252)))
+ggplot(train_knn, highlight= TRUE)
+```
+
+The best accuracy that it could achieve is *0.7105* with confidence interval of (0.6315, 0.7811).  In addition, both the sensitivity and specificity are much lower than logistic model previously.
+
+```{r, message=FALSE, warning=FALSE}
+knn_pred <- predict(train_knn, test_set, type = "raw")
+confusionMatrix(data=factor(knn_pred), factor(test_set$target))
+```
+
+If K-Fold cross validation is applied on KNN, the accuracy is about the same with 0.7171, which validates our KNN model.
+
+```{r, message=FALSE, warning=FALSE}
+control <-trainControl(method="cv", number = 10, savePredictions=T)
+train_knn_cv <- train(factor(target) ~ sex + factor(cp) + thalach + exang + 
+                      oldpeak, method = "knn",
+                      data = train_set, tuneGrid = data.frame(k = seq(1,252,2)),
+                      trControl = control)
+ggplot(train_knn_cv, highlight=TRUE)
+
+knn_pred <- predict(train_knn_cv, test_set, type = "raw")
+cm_knn <- confusionMatrix(data=factor(knn_pred), factor(test_set$target))
+cm_knn
+
+```
+
+### 4. Classification(decision) trees with Cross Validation
+Classification(Decision) tree is commonly used in machine learning and data mining.  It is used in where the outcome is categorical.  It is a simple representation for classifying examples.  The tree can be learned by splitting the source into subsets based on the attribute value test.  The process then repeated on each derived subset, which is called recursive partitioning.  The model predict the value of the target based on various variables inputs.  Each interior node corresponds to one of the variables.  Each leaf represents a value of the target variable.  
+
+Classification tree uses *Gini Index* and *Entropy* to decide where to partition the tree.  Gini Index is defined as
+$$ Gini = \sum_{k=1}\widehat p_{m,k}(1-\widehat p_{m,k})$$
+
+and Entropy is defined as
+$$ Entropy = -\sum_{k=1} \widehat p_{m,k}log(\widehat p_{m,k})$$
+with 0 x log(0) defined as 0 and $\widehat p_{m,k}$ as the proportion of observations in partition *m* that are of class *k*.  If K=0, then both the Gini Index and Entropy are 0.  
+
+Let's examine how classification performs in R programming compared to other learning models.  The code start to train the model using the train function with method "rpart".  The accuracy is shown to be 0.7829, much higher than KNN model, but still lower than our Logistic Regression.
+
+```{r, message=FALSE, warning=FALSE}
+control <- trainControl(method = "cv",
+             number = 10, savePredictions=T)
+
+train_rpart <- train(factor(target) ~ .,
+                     method = "rpart",
+                     tuneGrid = data.frame(cp = c(0.01)),
+                     data = train_set, trControl = control)
+
+#plot(train_rpart)
+
+rpart_pred <- predict(train_rpart, test_set)
+cm_ct <- confusionMatrix(data=factor(rpart_pred), factor(test_set$target))
+cm_ct
+varImp(train_rpart)
+
+```
+
+The decision tree is shown below. From the tree, it is much easier to interpret and easer to visualize.  The tree first split with predictor *ca*.  In addition, the variable importance showed that Thal, chest pain, and old peak on ECG are the most important variables.
+
+```{r, message=FALSE, warning=FALSE}
+##plot(train_rpart$finalModel, margin = 0.1)
+##text(train_rpart$finalModel, cex = 0.65)
+rpart.plot(train_rpart$finalModel, type = 4, fallen.leaves = FALSE, box.palette = "GnRd", nn=TRUE)
+```
+
+### 5. Random Forest with Cross Validation
+Decision tree has its limitations.  It is harder to train than KNN or regression model.  It can also lead to over-train due to its recursive properties.  To overcome these limitations, Random Forest is introduced.  The goal of Random Forest is to improve prediction performance and instability by averaging the decision trees.  The trick is to use bragging.  This can be done by building decision tress \(T_1, T_2, .., T_B \) using the training set.  For every observation in test set, form a prediction \(\widehat y_j\) using \(T_j\).  
+
+First, create a bootstrap training by sampling N observation from training set with replacement.  Then create a decision tree from bootstrap training set.  Below is the code to achieve that and its accuracy of *0.8421* with a 95% confidence interval of *(0.7742, 0.8961)*.  This accuracy is very close to logistic regression. The plot of the accuracy and the list of variable importance is also displayed.  Notice that the number of blood vessels(ca), old peak and maximum heart rate are the most important variables.
+
+```{r, message=FALSE, warning=FALSE}
+control <- trainControl(method = "cv",
+                        number = 10, savePredictions=T)
+
+train_rf <- train(factor(target) ~ .,
+                  method = "rf",
+                  data = train_set, trControl = control)
+
+plot(train_rf)
+
+pred_rf <- predict(train_rf, test_set)
+cm_rf <- confusionMatrix(data = factor(pred_rf),factor(test_set$target))
+cm_rf
+
+## display the variable importance
+varImp(train_rf)
+```
+
+
+## Results
+From the table 5 shown below, Logistic Regression achieve the highest accuracy followed by Random Forest.  All of the modeling methods beat out the regular guesses. Furthermore, the sensitivity and specificity are high with logistic regression as compared to other models.  
+
+```{r, message=FALSE, warning=FALSE, echo = FALSE}
+results_table <- data.frame(methods = c('Regular Guesses', 
+                                        'Logistic Regression with K-Fold CV', 
+                                        'KNN with K-Fold CV', 
+                                        'Classification Tree with K-Fold CV', 
+                                        'Random Forest with K-Fold CV'),
+                            'Accuracy Values' = c(m,
+                                       cm_lr$overall[["Accuracy"]],
+                                       cm_knn$overall[["Accuracy"]],
+                                       cm_ct$overall[["Accuracy"]],
+                                       cm_rf$overall[["Accuracy"]]),
+                            sensitivity = c('--',cm_lr$byClass[1],
+                                            cm_knn$byClass[1],
+                                            cm_ct$byClass[1],
+                                            cm_rf$byClass[1]),
+                            specificity = c('--',cm_lr$byClass[2],
+                                            cm_knn$byClass[2],
+                                            cm_ct$byClass[2],
+                                            cm_rf$byClass[2]))
+results_table %>% kable(caption="Accuracy Results From Various Methods.") %>%  kable_styling(bootstrap_options = "striped", full_width = F, position = "center", font_size = 10, latex_options = "hold_position") 
+```
+
+Part of the issue with low accuracies in KNN could be due to small amount of dataset.  It only contained 303 observations, as compared to other data for machine learning which could range from thousands to millions.  If there was more data available, the KNN model, classification tree and random forest accuracies, sensitivities, and specificities will be much more accurate.
+
+## Conclusion
+This project touched on multiple model for machine learning.  It ended up with Logistic Regression being the best model to predict heart disease.  It was interesting project from a medical point of view because health care providers could use this modeling to help patients in predicting their chances of having heart disease in the future.  This will allow both patients and doctors to discuss their options of treatments and preventions.  The set back of this project is that it does not predict the type of heart disease the patient will have, since each treatment is slightly different.  
+
+For future works, if there is more data available, the modeling methods would be run again to see if KNN will beat out logistic regression.  In addition, if there are data that categorize the type of heart disease, it will be valuable to health care providers to come up with treatment plan for the patients.
+
